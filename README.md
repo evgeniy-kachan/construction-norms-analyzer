@@ -19,7 +19,7 @@
 
 ## Использование
 
-1. Откройте [веб-приложение](https://your-username.github.io/construction-norms-analyzer/)
+1. Откройте [веб-приложение](https://evgeniy-kachan.github.io/construction-norms-analyzer/)
 2. Перетащите файл чертежа (PDF или изображение) в область загрузки или нажмите кнопку "Выберите файл"
 3. Дождитесь завершения анализа
 4. Просмотрите найденные нарушения в списке справа
@@ -30,7 +30,7 @@
 1. Клонируйте репозиторий:
 
 ```bash
-git clone https://github.com/your-username/construction-norms-analyzer.git
+git clone https://github.com/evgeniy-kachan/construction-norms-analyzer.git
 ```
 
 2. Откройте `index.html` в браузере или используйте локальный сервер:
