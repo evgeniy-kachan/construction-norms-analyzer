@@ -25,7 +25,16 @@
           <div class="drop-zone" id="dropZone">
             <p>Перетащите файл сюда или</p>
             <button id="uploadButton">Выберите файл</button>
-            <input type="file" id="fileInput" accept=".pdf,.png" hidden />
+            <input
+              type="file"
+              id="fileInput"
+              accept=".pdf,.png,.jpg,.jpeg"
+              hidden
+            />
+          </div>
+          <div id="progressBar" class="progress-bar" hidden>
+            <div class="progress-fill"></div>
+            <div class="progress-text">Обработка...</div>
           </div>
         </div>
 
@@ -59,15 +68,18 @@
         const previewSection = document.getElementById('previewSection');
         const resultsSection = document.getElementById('resultsSection');
         const violationsList = document.getElementById('violationsList');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = progressBar.querySelector('.progress-fill');
+        const progressText = progressBar.querySelector('.progress-text');
 
         // Инициализируем подсветку нарушений
-        normChecker.initHighlighter(previewCanvas);
+        window.normChecker.initHighlighter(previewCanvas);
 
         // Обработчик кнопки переключения видимости нарушений
         document
           .getElementById('toggleHighlights')
           .addEventListener('click', () => {
-            normChecker.toggleHighlights();
+            window.normChecker.toggleHighlights();
           });
 
         // Обработчики загрузки файла
@@ -96,19 +108,25 @@
           handleFile(file);
         });
 
+        async function updateProgress(percent, text) {
+          progressFill.style.width = `${percent}%`;
+          progressText.textContent = text;
+        }
+
         async function handleFile(file) {
           if (!file) return;
 
           try {
-            // Показываем секции
-            previewSection.hidden = false;
-            resultsSection.hidden = false;
+            // Показываем прогресс-бар
+            progressBar.hidden = false;
+            updateProgress(0, 'Начало обработки...');
 
             // Очищаем предыдущие результаты
             violationsList.innerHTML = '';
-            normChecker.clearHighlights();
+            window.normChecker.clearHighlights();
 
             // Обрабатываем файл
+            updateProgress(20, 'Загрузка изображения...');
             let imageData;
             if (file.type === 'application/pdf') {
               imageData = await window.pdfProcessor.processPDF(file);
@@ -117,29 +135,48 @@
             }
 
             // Отображаем изображение
+            updateProgress(40, 'Анализ изображения...');
             previewCanvas.width = imageData.width;
             previewCanvas.height = imageData.height;
             const ctx = previewCanvas.getContext('2d');
             ctx.putImageData(imageData, 0, 0);
 
             // Анализируем изображение
+            updateProgress(60, 'Поиск нарушений...');
             const results = await window.imageAnalysis.analyzeImage(imageData);
 
-            // Проверяем нормы и отображаем результаты
-            results.violations.forEach((violation) => {
-              const div = document.createElement('div');
-              div.className = 'violation-item';
-              div.innerHTML = `
-                <h3>${violation.title}</h3>
-                <p>${violation.description}</p>
-                <p>Норма: ${violation.norm}</p>
-                <p>Фактическое значение: ${violation.actual}</p>
-              `;
-              violationsList.appendChild(div);
-            });
+            // Показываем секции
+            previewSection.hidden = false;
+            resultsSection.hidden = false;
+
+            updateProgress(80, 'Отображение результатов...');
+
+            // Отображаем результаты
+            if (results.violations.length === 0) {
+              violationsList.innerHTML =
+                '<div class="no-violations">Нарушений не обнаружено</div>';
+            } else {
+              results.violations.forEach((violation) => {
+                const div = document.createElement('div');
+                div.className = 'violation-item';
+                div.innerHTML = `
+                  <h3>${violation.title}</h3>
+                  <p>${violation.description}</p>
+                  <p>Норма: ${violation.norm}</p>
+                  <p>Фактическое значение: ${violation.actual}</p>
+                `;
+                violationsList.appendChild(div);
+              });
+            }
+
+            updateProgress(100, 'Готово');
+            setTimeout(() => {
+              progressBar.hidden = true;
+            }, 1000);
           } catch (error) {
             console.error('Error processing file:', error);
-            alert('Произошла ошибка при обработке файла');
+            alert('Произошла ошибка при обработке файла: ' + error.message);
+            progressBar.hidden = true;
           }
         }
       });

@@ -1,83 +1,148 @@
-async function processImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
+const imageProcessor = {
+  async processImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
 
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
 
-      // Draw image to canvas
-      ctx.drawImage(img, 0, 0);
+        // Calculate dimensions while maintaining aspect ratio
+        const maxWidth = 800;
+        const maxHeight = 600;
+        let width = img.width;
+        let height = img.height;
 
-      // Get image data for processing
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = width * ratio;
+          height = height * ratio;
+        }
 
-      // Clean up
-      URL.revokeObjectURL(url);
+        // Set canvas size
+        canvas.width = width;
+        canvas.height = height;
 
-      resolve(imageData);
-    };
+        // Draw image to canvas with proper scaling
+        ctx.drawImage(img, 0, 0, width, height);
 
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image'));
-    };
+        // Get image data for processing
+        const imageData = ctx.getImageData(0, 0, width, height);
 
-    img.src = url;
-  });
-}
+        // Clean up
+        URL.revokeObjectURL(url);
 
-async function analyzeImage(imageData) {
-  const violations = [];
+        resolve(imageData);
+      };
 
-  try {
-    // Convert image to grayscale for better analysis
-    const grayscaleData = convertToGrayscale(imageData);
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to load image'));
+      };
 
-    // Apply Gaussian blur to reduce noise
-    const blurredData = applyGaussianBlur(grayscaleData);
+      img.src = url;
+    });
+  },
 
-    // Detect edges to find walls
-    const edges = window.imageAnalysis.detectEdges(blurredData);
+  async analyzeImage(imageData) {
+    const violations = [];
 
-    // Find lines using Hough transform
-    const lines = window.imageAnalysis.detectLines(edges);
+    try {
+      // Convert image to grayscale for better analysis
+      const grayscaleData = convertToGrayscale(imageData);
 
-    // Group lines into walls
-    const walls = window.imageAnalysis.detectWalls(lines);
+      // Apply Gaussian blur to reduce noise
+      const blurredData = applyGaussianBlur(grayscaleData);
 
-    // Detect text regions and recognize measurements
-    const textRegions = await window.imageAnalysis.detectTextRegions(
-      grayscaleData
-    );
-    const measurements = await window.measurements.recognizeMeasurements(
-      textRegions
-    );
+      // Detect edges to find walls
+      const edges = window.imageAnalysis.detectEdges(blurredData);
 
-    // Analyze room geometry
-    const rooms = window.imageAnalysis.analyzeRoomGeometry(walls);
+      // Find lines using Hough transform
+      const lines = window.imageAnalysis.detectLines(edges);
 
-    // Calculate dimensions
-    const dimensions = window.measurements.calculateDimensions(
-      rooms,
-      measurements
-    );
+      // Group lines into walls
+      const walls = window.imageAnalysis.detectWalls(lines);
 
-    // Check measurements against norms
-    violations.push(...window.normChecker.checkNormViolations(dimensions));
+      // Detect text regions and recognize measurements
+      const textRegions = await window.imageAnalysis.detectTextRegions(
+        grayscaleData
+      );
+      const measurements = await window.measurements.recognizeMeasurements(
+        textRegions
+      );
 
-    // Highlight violations on the preview
-    highlightViolations(violations, walls);
-  } catch (error) {
-    console.error('Error analyzing image:', error);
-    throw error;
-  }
+      // Analyze room geometry
+      const rooms = window.imageAnalysis.analyzeRoomGeometry(walls);
 
-  return violations;
-}
+      // Calculate dimensions
+      const dimensions = window.measurements.calculateDimensions(
+        rooms,
+        measurements
+      );
+
+      // Check measurements against norms
+      violations.push(...window.normChecker.checkNormViolations(dimensions));
+
+      // Highlight violations on the preview
+      highlightViolations(violations, walls);
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      throw error;
+    }
+
+    return violations;
+  },
+
+  highlightViolations(violations, walls) {
+    const canvas = document.getElementById('previewCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Сохраняем текущее состояние canvas
+    ctx.save();
+
+    // Настраиваем стиль для отображения нарушений
+    ctx.strokeStyle = '#F44336';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 5]);
+
+    violations.forEach((violation) => {
+      // Находим соответствующую стену или область
+      const relatedWall = findRelatedWall(violation, walls);
+      if (relatedWall) {
+        // Рисуем выделение
+        ctx.beginPath();
+        ctx.moveTo(relatedWall.start.x, relatedWall.start.y);
+        ctx.lineTo(relatedWall.end.x, relatedWall.end.y);
+        ctx.stroke();
+
+        // Добавляем текст с описанием нарушения
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#F44336';
+        ctx.fillText(
+          `${violation.title}: ${violation.actual} (норма: ${violation.norm})`,
+          relatedWall.start.x,
+          relatedWall.start.y - 10
+        );
+      }
+    });
+
+    // Восстанавливаем состояние canvas
+    ctx.restore();
+  },
+
+  findRelatedWall(violation, walls) {
+    // Находим стену, связанную с нарушением
+    // Это заглушка, реальная реализация будет зависеть от типа нарушения
+    return walls.find((wall) => {
+      // Здесь должна быть логика поиска соответствующей стены
+      return true;
+    });
+  },
+};
+
+// Экспортируем модуль
+window.imageProcessor = imageProcessor;
 
 function convertToGrayscale(imageData) {
   const data = new Uint8ClampedArray(imageData.data);
@@ -157,56 +222,3 @@ function applyConvolution(imageData, kernel) {
 
   return new ImageData(result, width, height);
 }
-
-function highlightViolations(violations, walls) {
-  const canvas = document.getElementById('previewCanvas');
-  const ctx = canvas.getContext('2d');
-
-  // Сохраняем текущее состояние canvas
-  ctx.save();
-
-  // Настраиваем стиль для отображения нарушений
-  ctx.strokeStyle = '#F44336';
-  ctx.lineWidth = 3;
-  ctx.setLineDash([5, 5]);
-
-  violations.forEach((violation) => {
-    // Находим соответствующую стену или область
-    const relatedWall = findRelatedWall(violation, walls);
-    if (relatedWall) {
-      // Рисуем выделение
-      ctx.beginPath();
-      ctx.moveTo(relatedWall.start.x, relatedWall.start.y);
-      ctx.lineTo(relatedWall.end.x, relatedWall.end.y);
-      ctx.stroke();
-
-      // Добавляем текст с описанием нарушения
-      ctx.font = '14px Arial';
-      ctx.fillStyle = '#F44336';
-      ctx.fillText(
-        `${violation.title}: ${violation.actual} (норма: ${violation.norm})`,
-        relatedWall.start.x,
-        relatedWall.start.y - 10
-      );
-    }
-  });
-
-  // Восстанавливаем состояние canvas
-  ctx.restore();
-}
-
-function findRelatedWall(violation, walls) {
-  // Находим стену, связанную с нарушением
-  // Это заглушка, реальная реализация будет зависеть от типа нарушения
-  return walls.find((wall) => {
-    // Здесь должна быть логика поиска соответствующей стены
-    return true;
-  });
-}
-
-// Экспортируем функции
-window.imageProcessor = {
-  processImage,
-  analyzeImage,
-  highlightViolations,
-};

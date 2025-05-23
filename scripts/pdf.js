@@ -14,16 +14,27 @@ async function processPDF(file) {
     // Get page dimensions
     const viewport = page.getViewport({ scale: 1.0 });
 
+    // Calculate scale to fit within 800x600 while maintaining aspect ratio
+    const maxWidth = 800;
+    const maxHeight = 600;
+    const scale = Math.min(
+      maxWidth / viewport.width,
+      maxHeight / viewport.height
+    );
+
+    // Create scaled viewport
+    const scaledViewport = page.getViewport({ scale });
+
     // Create canvas for rendering
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    canvas.width = scaledViewport.width;
+    canvas.height = scaledViewport.height;
 
     // Render PDF page to canvas
     const renderContext = {
       canvasContext: context,
-      viewport: viewport,
+      viewport: scaledViewport,
     };
 
     await page.render(renderContext).promise;
@@ -35,3 +46,6 @@ async function processPDF(file) {
     throw new Error('Failed to process PDF file');
   }
 }
+
+// Экспортируем функцию
+window.pdfProcessor = { processPDF };
