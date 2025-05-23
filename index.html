@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Анализатор строительных норм</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Анализатор строительных норм</h1>
+      </header>
+
+      <div class="toolbar">
+        <button id="toggleHighlights" class="toolbar-button">
+          Показать/скрыть нарушения
+        </button>
+      </div>
+
+      <main>
+        <div class="upload-section">
+          <div class="drop-zone" id="dropZone">
+            <p>Перетащите файл сюда или</p>
+            <button id="uploadButton">Выберите файл</button>
+            <input type="file" id="fileInput" accept=".pdf,.png" hidden />
+          </div>
+        </div>
+
+        <div class="preview-section" id="previewSection" hidden>
+          <h2>Предпросмотр</h2>
+          <div class="preview-container">
+            <canvas id="previewCanvas"></canvas>
+          </div>
+        </div>
+
+        <div class="results-section" id="resultsSection" hidden>
+          <h2>Результаты анализа</h2>
+          <div class="violations-list" id="violationsList"></div>
+        </div>
+      </main>
+    </div>
+
+    <script src="scripts/pdf.js"></script>
+    <script src="scripts/imageAnalysis.js"></script>
+    <script src="scripts/measurements.js"></script>
+    <script src="scripts/imageProcessing.js"></script>
+    <script src="scripts/normChecker.js"></script>
+    <script src="scripts/violationHighlighter.js"></script>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const previewCanvas = document.getElementById('previewCanvas');
+        const dropZone = document.getElementById('dropZone');
+        const uploadButton = document.getElementById('uploadButton');
+        const fileInput = document.getElementById('fileInput');
+        const previewSection = document.getElementById('previewSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const violationsList = document.getElementById('violationsList');
+
+        // Инициализируем подсветку нарушений
+        normChecker.initHighlighter(previewCanvas);
+
+        // Обработчик кнопки переключения видимости нарушений
+        document
+          .getElementById('toggleHighlights')
+          .addEventListener('click', () => {
+            normChecker.toggleHighlights();
+          });
+
+        // Обработчики загрузки файла
+        dropZone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+          dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          dropZone.classList.remove('drag-over');
+          const file = e.dataTransfer.files[0];
+          handleFile(file);
+        });
+
+        uploadButton.addEventListener('click', () => {
+          fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          handleFile(file);
+        });
+
+        async function handleFile(file) {
+          if (!file) return;
+
+          try {
+            // Показываем секции
+            previewSection.hidden = false;
+            resultsSection.hidden = false;
+
+            // Очищаем предыдущие результаты
+            violationsList.innerHTML = '';
+            normChecker.clearHighlights();
+
+            // Обрабатываем файл
+            let imageData;
+            if (file.type === 'application/pdf') {
+              imageData = await window.pdfProcessor.processPDF(file);
+            } else {
+              imageData = await window.imageProcessor.processImage(file);
+            }
+
+            // Отображаем изображение
+            previewCanvas.width = imageData.width;
+            previewCanvas.height = imageData.height;
+            const ctx = previewCanvas.getContext('2d');
+            ctx.putImageData(imageData, 0, 0);
+
+            // Анализируем изображение
+            const results = await window.imageAnalysis.analyzeImage(imageData);
+
+            // Проверяем нормы и отображаем результаты
+            results.violations.forEach((violation) => {
+              const div = document.createElement('div');
+              div.className = 'violation-item';
+              div.innerHTML = `
+                <h3>${violation.title}</h3>
+                <p>${violation.description}</p>
+                <p>Норма: ${violation.norm}</p>
+                <p>Фактическое значение: ${violation.actual}</p>
+              `;
+              violationsList.appendChild(div);
+            });
+          } catch (error) {
+            console.error('Error processing file:', error);
+            alert('Произошла ошибка при обработке файла');
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

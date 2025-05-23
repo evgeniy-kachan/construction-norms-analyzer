@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Анализатор строительных норм</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <style>
+      body {
+        width: 400px;
+        padding: 16px;
+      }
+
+      .popup-container {
+        text-align: center;
+      }
+
+      .analyze-button {
+        margin: 16px 0;
+        padding: 8px 16px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .analyze-button:hover {
+        background-color: #1976d2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="popup-container">
+      <h1>Анализатор строительных норм</h1>
+      <p>Откройте веб-приложение для анализа планов помещений</p>
+      <button id="openApp" class="analyze-button">Открыть приложение</button>
+    </div>
+
+    <script src="scripts/popup.js"></script>
+  </body>
+</html>
