@@ -11,6 +11,10 @@ const imageAnalysis = {
     };
 
     try {
+      // 0. Убеждаемся, что нормы загружены
+      await window.normChecker.loadNorms();
+      console.log('Нормы загружены, начинаем анализ');
+
       // 1. Определяем стены и комнаты
       const walls = await this.detectWalls(imageData);
       results.walls = walls;
@@ -18,17 +22,21 @@ const imageAnalysis = {
       const rooms = this.detectRooms(walls);
       results.rooms = rooms;
 
-      // 2. Распознаем размеры
-      const measurements = await this.recognizeMeasurements(imageData);
-      results.measurements = measurements.measurements;
+      // 2. Распознаем размеры и типы помещений
+      const { measurements, roomTypes } = await this.recognizeMeasurements(
+        imageData
+      );
+      results.measurements = measurements;
 
       // 3. Проверяем нормы для каждой комнаты
       rooms.forEach((room) => {
         // Проверяем размеры комнаты
+        console.log('Проверяем комнату:', room);
+
         const widthCheck = window.normChecker.checkMeasurement(
           room.width,
-          'комната',
-          'ширина',
+          room.type || 'комната', // Используем тип из распознавания или по умолчанию
+          'width',
           {
             x: room.bounds.x,
             y: room.bounds.y,
@@ -39,8 +47,8 @@ const imageAnalysis = {
 
         const lengthCheck = window.normChecker.checkMeasurement(
           room.length,
-          'комната',
-          'длина от окна',
+          room.type || 'комната',
+          'length',
           {
             x: room.bounds.x,
             y: room.bounds.y,
@@ -49,18 +57,36 @@ const imageAnalysis = {
           }
         );
 
-        const areaCheck = window.normChecker.checkArea(room.area, room.type, {
-          points: room.points,
-        });
+        const areaCheck = window.normChecker.checkArea(
+          room.area,
+          room.type || 'комната',
+          {
+            points: room.points,
+          }
+        );
 
         // Собираем нарушения
-        if (!widthCheck.isValid) results.violations.push(widthCheck.violation);
-        if (!lengthCheck.isValid)
+        if (!widthCheck.isValid) {
+          console.log('Найдено нарушение ширины:', widthCheck.violation);
+          results.violations.push(widthCheck.violation);
+        }
+        if (!lengthCheck.isValid) {
+          console.log('Найдено нарушение длины:', lengthCheck.violation);
           results.violations.push(lengthCheck.violation);
-        if (!areaCheck.isValid) results.violations.push(areaCheck.violation);
+        }
+        if (!areaCheck.isValid) {
+          console.log('Найдено нарушение площади:', areaCheck.violation);
+          results.violations.push(areaCheck.violation);
+        }
       });
+
+      console.log(
+        'Анализ завершен, найдено нарушений:',
+        results.violations.length
+      );
     } catch (error) {
       console.error('Error analyzing image:', error);
+      throw error; // Пробрасываем ошибку дальше для обработки в UI
     }
 
     return results;

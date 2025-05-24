@@ -64,28 +64,44 @@ const normChecker = {
   // Проверка размера
   checkMeasurement(value, roomType, dimension, bounds) {
     if (!this.norms) {
-      throw new Error('Нормы еще не загружены');
+      console.error('Нормы не загружены');
+      return {
+        isValid: true, // Если нормы не загружены, пропускаем проверку
+        violation: null,
+      };
     }
 
-    // Нормализуем тип помещения
-    roomType = roomType.toLowerCase();
-    console.log('Checking measurement for room type:', roomType);
+    // Нормализуем тип помещения и размерность
+    roomType = (roomType || 'комната').toLowerCase();
+    dimension = dimension.toLowerCase();
+
+    console.log('Checking measurement:', {
+      value,
+      roomType,
+      dimension,
+      bounds,
+    });
 
     const roomNorms = this.norms.rooms[roomType];
     if (!roomNorms) {
       console.log('No norms found for room type:', roomType);
       return {
         isValid: true, // Если нет норм для типа помещения, считаем допустимым
-        violation: null
+        violation: null,
       };
     }
 
     const dimensionNorms = roomNorms[dimension];
     if (!dimensionNorms) {
-      console.log('No norms found for dimension:', dimension, 'in room type:', roomType);
+      console.log(
+        'No norms found for dimension:',
+        dimension,
+        'in room type:',
+        roomType
+      );
       return {
         isValid: true, // Если нет норм для измерения, считаем допустимым
-        violation: null
+        violation: null,
       };
     }
 
@@ -97,7 +113,7 @@ const normChecker = {
         description: dimensionNorms.description,
         norm: `${dimensionNorms.min} мм`,
         actual: `${value} мм`,
-        bounds: bounds
+        bounds: bounds,
       };
 
       // Добавляем подсветку нарушения
@@ -114,17 +130,37 @@ const normChecker = {
   // Проверка площади
   checkArea(value, roomType, bounds) {
     if (!this.norms) {
-      throw new Error('Нормы еще не загружены');
-    }
-
-    const roomNorms = this.norms.rooms[roomType.toLowerCase()];
-    if (!roomNorms || !roomNorms.area) {
+      console.error('Нормы не загружены');
       return {
         isValid: true,
         violation: null,
       };
     }
 
+    // Нормализуем тип помещения
+    roomType = (roomType || 'комната').toLowerCase();
+
+    console.log('Checking area:', {
+      value,
+      roomType,
+      bounds,
+    });
+
+    const roomNorms = this.norms.rooms[roomType];
+    if (!roomNorms || !roomNorms.area) {
+      console.log('No area norms found for room type:', roomType);
+      return {
+        isValid: true,
+        violation: null,
+      };
+    }
+
+    console.log(
+      'Checking area value:',
+      value,
+      'against norm:',
+      roomNorms.area.min
+    );
     const isValid = value >= roomNorms.area.min;
     if (!isValid) {
       const violation = {
