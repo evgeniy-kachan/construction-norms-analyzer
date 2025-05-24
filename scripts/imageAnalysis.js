@@ -13,7 +13,9 @@ const imageAnalysis = {
     try {
       // 1. Анализируем геометрию с помощью TensorFlow
       console.log('Starting TensorFlow analysis...');
-      const geometryResults = await window.geometryAnalysis.analyzeGeometry(imageData);
+      const geometryResults = await window.geometryAnalysis.analyzeGeometry(
+        imageData
+      );
       results.walls = geometryResults.walls;
       results.rooms = geometryResults.rooms;
 
@@ -61,13 +63,9 @@ const imageAnalysis = {
           }
         );
 
-        const areaCheck = window.normChecker.checkArea(
-          room.area,
-          room.type,
-          {
-            points: room.points,
-          }
-        );
+        const areaCheck = window.normChecker.checkArea(room.area, room.type, {
+          points: room.points,
+        });
 
         // Собираем нарушения
         if (!widthCheck.isValid) {
@@ -96,9 +94,9 @@ const imageAnalysis = {
   // Сопоставление текста с геометрией
   matchTextWithGeometry(results) {
     console.log('Starting text-geometry matching...');
-    
+
     // Для каждой найденной комнаты
-    results.rooms.forEach(room => {
+    results.rooms.forEach((room) => {
       // Ищем ближайший текст с типом помещения
       const nearestRoomType = this.findNearestText(
         room.bounds,
@@ -115,9 +113,9 @@ const imageAnalysis = {
         room.bounds,
         results.measurements
       );
-      
+
       // Определяем размеры на основе ориентации размеров
-      nearestMeasurements.forEach(measurement => {
+      nearestMeasurements.forEach((measurement) => {
         const isHorizontal = this.isHorizontalMeasurement(measurement);
         if (isHorizontal) {
           room.width = measurement.value;
@@ -134,23 +132,23 @@ const imageAnalysis = {
   findNearestText(bounds, measurements, type) {
     const center = {
       x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2
+      y: bounds.y + bounds.height / 2,
     };
 
     let nearest = null;
     let minDistance = Infinity;
 
-    measurements.forEach(measurement => {
+    measurements.forEach((measurement) => {
       if (measurement.type !== type) return;
 
       const measurementCenter = {
         x: measurement.x + measurement.width / 2,
-        y: measurement.y + measurement.height / 2
+        y: measurement.y + measurement.height / 2,
       };
 
       const distance = Math.sqrt(
         Math.pow(center.x - measurementCenter.x, 2) +
-        Math.pow(center.y - measurementCenter.y, 2)
+          Math.pow(center.y - measurementCenter.y, 2)
       );
 
       if (distance < minDistance) {
@@ -165,7 +163,7 @@ const imageAnalysis = {
   // Поиск ближайших размеров
   findNearbyMeasurements(bounds, measurements) {
     const maxDistance = Math.max(bounds.width, bounds.height) / 2;
-    return measurements.filter(measurement => {
+    return measurements.filter((measurement) => {
       const distance = this.getDistanceToBounds(measurement, bounds);
       return distance <= maxDistance;
     });
@@ -184,8 +182,7 @@ const imageAnalysis = {
     const pointCenterY = point.y + point.height / 2;
 
     return Math.sqrt(
-      Math.pow(centerX - pointCenterX, 2) +
-      Math.pow(centerY - pointCenterY, 2)
+      Math.pow(centerX - pointCenterX, 2) + Math.pow(centerY - pointCenterY, 2)
     );
   },
 
