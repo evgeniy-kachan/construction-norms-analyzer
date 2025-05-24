@@ -308,17 +308,26 @@ const imageAnalysis = {
       const ctx = canvas.getContext('2d');
       console.log('Canvas created:', canvas.width, 'x', canvas.height);
 
-      // Применяем предобработку для улучшения распознавания
+      // Применяем улучшенную предобработку для улучшения распознавания
       const processedImageData = this.preprocessForOCR(imageData);
       ctx.putImageData(processedImageData, 0, 0);
-      console.log('Image preprocessing completed');
+      console.log('Enhanced image preprocessing completed');
 
       // Получаем URL изображения для Tesseract
       const imageUrl = canvas.toDataURL('image/png');
       console.log('Image converted to URL');
 
+      // Настраиваем Tesseract для лучшего распознавания
+      await worker.loadLanguage('rus+eng');
+      await worker.initialize('rus+eng');
+      await worker.setParameters({
+        tessedit_char_whitelist: '0123456789.,xXхХ мМmMсС', // Разрешенные символы
+        tessedit_pageseg_mode: '1', // Автоматическая сегментация
+        tessedit_ocr_engine_mode: '2', // Нейронная сеть LSTM
+      });
+
       // Распознаем текст с получением координат
-      console.log('Starting Tesseract recognition...');
+      console.log('Starting enhanced Tesseract recognition...');
       const { data } = await worker.recognize(imageUrl);
       console.log('Recognition completed. Raw result:', data);
 
@@ -329,60 +338,48 @@ const imageAnalysis = {
       const measurements = [];
       const roomTypes = [];
 
-      // Функция для нормализации текста
-      const normalizeText = (text) => {
-        const replacements = {
-          KyxHa: 'кухня',
-          Kyxня: 'кухня',
-          Kopuoop: 'коридор',
-          Room: 'комната',
-          room: 'комната',
+      // Собираем контекст для каждого слова
+      const words = data.words || [];
+      const wordContexts = words.map((word, index) => {
+        const nearbyWords = words
+          .filter((w, i) => {
+            if (i === index) return false;
+            const distance = Math.sqrt(
+              Math.pow(w.bbox.x0 - word.bbox.x0, 2) +
+                Math.pow(w.bbox.y0 - word.bbox.y0, 2)
+            );
+            return distance < 100; // Ищем слова в радиусе 100 пикселей
+          })
+          .map((w) => w.text)
+          .join(' ');
+
+        return {
+          word,
+          nearbyText: nearbyWords,
         };
+      });
 
-        // Приводим к нижнему регистру и заменяем известные ошибки
-        let normalized = text.toLowerCase();
-        for (const [wrong, correct] of Object.entries(replacements)) {
-          if (normalized.includes(wrong.toLowerCase())) {
-            normalized = correct;
-            break;
-          }
-        }
-        return normalized;
-      };
-
-      // Обрабатываем каждое слово
-      if (data.words && data.words.length > 0) {
-        console.log('Processing', data.words.length, 'words');
-        data.words.forEach((word, index) => {
-          const normalizedText = normalizeText(word.text);
+      // Обрабатываем каждое слово с учетом контекста
+      if (words.length > 0) {
+        console.log('Processing', words.length, 'words with context');
+        wordContexts.forEach(({ word, nearbyText }) => {
+          const normalizedText = this.normalizeText(word.text, { nearbyText });
           console.log(
-            `Processing word ${index + 1}:`,
+            'Processing word:',
             word.text,
             '(normalized:',
             normalizedText,
+            'context:',
+            nearbyText,
             ')'
           );
 
-          // Проверяем на размеры (число + единица измерения)
-          const measurementMatch = normalizedText.match(
-            /(\d+(?:[.,]\d+)?)\s*(мм|см|м|m)/i
-          );
-          if (measurementMatch) {
-            console.log('Found measurement:', measurementMatch[0]);
-            // Преобразуем все размеры в миллиметры
-            let value = parseFloat(measurementMatch[1].replace(',', '.'));
-            const unit = measurementMatch[2].toLowerCase();
-            if (unit === 'м' || unit === 'm') {
-              value *= 1000;
-            } else if (unit === 'см') {
-              value *= 10;
-            }
-
+          // Проверяем на размеры
+          const measurement = this.parseMeasurement(word.text);
+          if (measurement) {
+            console.log('Found measurement:', measurement);
             measurements.push({
-              value: value,
-              unit: 'мм', // Храним все размеры в миллиметрах
-              originalValue: measurementMatch[1],
-              originalUnit: unit,
+              ...measurement,
               x: word.bbox.x0,
               y: word.bbox.y0,
               width: word.bbox.x1 - word.bbox.x0,
@@ -400,7 +397,9 @@ const imageAnalysis = {
             'туалет',
             'коридор',
             'прихожая',
+            'жилая комната',
           ];
+
           if (validRoomTypes.includes(normalizedText)) {
             console.log('Found room type:', normalizedText);
             roomTypes.push({
@@ -417,7 +416,7 @@ const imageAnalysis = {
         console.log('No words found in recognition result');
       }
 
-      console.log('Recognition results:', {
+      console.log('Enhanced recognition results:', {
         measurements: measurements.length,
         roomTypes: roomTypes.length,
         measurements_details: measurements,
@@ -441,24 +440,169 @@ const imageAnalysis = {
     const width = imageData.width;
     const height = imageData.height;
 
-    // Преобразуем в оттенки серого
+    // 1. Преобразуем в оттенки серого с учетом особенностей восприятия
     for (let i = 0; i < data.length; i += 4) {
-      const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-      data[i] = avg; // R
-      data[i + 1] = avg; // G
-      data[i + 2] = avg; // B
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      // Используем формулу для лучшего восприятия контраста
+      const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+      data[i] = gray; // R
+      data[i + 1] = gray; // G
+      data[i + 2] = gray; // B
     }
 
-    // Применяем пороговое значение для улучшения контраста
-    const threshold = 128;
+    // 2. Применяем размытие по Гауссу для уменьшения шума
+    const blurred = this.gaussianBlur(data, width, height);
+
+    // 3. Применяем адаптивное пороговое значение
+    const threshold = this.adaptiveThreshold(blurred, width, height);
+
+    // 4. Увеличиваем контраст
     for (let i = 0; i < data.length; i += 4) {
-      const value = data[i] > threshold ? 255 : 0;
+      const value = threshold[i / 4] ? 255 : 0;
       data[i] = value; // R
       data[i + 1] = value; // G
       data[i + 2] = value; // B
+      data[i + 3] = 255; // A
     }
 
     return new ImageData(data, width, height);
+  },
+
+  // Размытие по Гауссу
+  gaussianBlur(data, width, height) {
+    const kernel = [
+      [1, 2, 1],
+      [2, 4, 2],
+      [1, 2, 1],
+    ];
+    const kernelSum = 16;
+    const result = new Uint8Array(width * height);
+
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        let sum = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const idx = ((y + ky) * width + (x + kx)) * 4;
+            sum += data[idx] * kernel[ky + 1][kx + 1];
+          }
+        }
+        result[y * width + x] = sum / kernelSum;
+      }
+    }
+    return result;
+  },
+
+  // Адаптивное пороговое значение
+  adaptiveThreshold(data, width, height) {
+    const result = new Uint8Array(width * height);
+    const blockSize = 11; // Размер блока для адаптации
+    const c = 2; // Константа для корректировки порога
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        let count = 0;
+
+        // Вычисляем среднее значение в окне
+        for (let wy = -blockSize; wy <= blockSize; wy++) {
+          for (let wx = -blockSize; wx <= blockSize; wx++) {
+            const ny = y + wy;
+            const nx = x + wx;
+            if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              sum += data[ny * width + nx];
+              count++;
+            }
+          }
+        }
+
+        const threshold = sum / count - c;
+        const idx = y * width + x;
+        result[idx] = data[idx] > threshold ? 1 : 0;
+      }
+    }
+    return result;
+  },
+
+  // Нормализация текста с учетом контекста
+  normalizeText(text, context = {}) {
+    // Базовые замены для известных ошибок
+    const replacements = {
+      KyxHa: 'кухня',
+      Kyxня: 'кухня',
+      Kopuoop: 'коридор',
+      Room: 'комната',
+      room: 'комната',
+      Kitchen: 'кухня',
+      Bathroom: 'ванная',
+      Bath: 'ванная',
+      Toilet: 'туалет',
+      WC: 'туалет',
+      Hall: 'коридор',
+      Corridor: 'коридор',
+      Living: 'комната',
+      Bedroom: 'комната',
+    };
+
+    // Приводим к нижнему регистру и удаляем лишние пробелы
+    let normalized = text.toLowerCase().trim();
+
+    // Заменяем известные ошибки
+    for (const [wrong, correct] of Object.entries(replacements)) {
+      if (normalized.includes(wrong.toLowerCase())) {
+        normalized = correct;
+        break;
+      }
+    }
+
+    // Если есть контекст положения текста, используем его
+    if (context.nearbyText) {
+      // Можно использовать соседний текст для уточнения
+      if (context.nearbyText.includes('жилая') && normalized === 'комната') {
+        normalized = 'жилая комната';
+      }
+    }
+
+    return normalized;
+  },
+
+  // Распознавание размеров с учетом контекста
+  parseMeasurement(text) {
+    // Расширенный шаблон для поиска размеров
+    const patterns = [
+      // Стандартный формат с единицами измерения
+      /(\d+(?:[.,]\d+)?)\s*(мм|см|м|m)/i,
+      // Размеры в формате ШхВ или ШxВ
+      /(\d+(?:[.,]\d+)?)\s*[xх]\s*(\d+(?:[.,]\d+)?)/i,
+      // Просто числа рядом с элементами чертежа
+      /(\d+(?:[.,]\d+)?)/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        // Преобразуем все размеры в миллиметры
+        let value = parseFloat(match[1].replace(',', '.'));
+        const unit = match[2]?.toLowerCase() || 'м'; // По умолчанию считаем метрами
+
+        if (unit === 'м' || unit === 'm') {
+          value *= 1000;
+        } else if (unit === 'см') {
+          value *= 10;
+        }
+
+        return {
+          value,
+          unit: 'мм',
+          originalValue: match[1],
+          originalUnit: unit,
+        };
+      }
+    }
+
+    return null;
   },
 };
 
