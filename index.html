@@ -47,7 +47,20 @@
 
         <div class="results-section" id="resultsSection" hidden>
           <h2>Результаты анализа</h2>
-          <div class="violations-list" id="violationsList"></div>
+          <div class="results-container">
+            <div class="recognized-text">
+              <h3>Распознанный текст</h3>
+              <div class="text-list" id="textList"></div>
+            </div>
+            <div class="measurements">
+              <h3>Размеры</h3>
+              <div class="measurements-list" id="measurementsList"></div>
+            </div>
+            <div class="violations">
+              <h3>Нарушения</h3>
+              <div class="violations-list" id="violationsList"></div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -68,6 +81,8 @@
         const previewSection = document.getElementById('previewSection');
         const resultsSection = document.getElementById('resultsSection');
         const violationsList = document.getElementById('violationsList');
+        const textList = document.getElementById('textList');
+        const measurementsList = document.getElementById('measurementsList');
         const progressBar = document.getElementById('progressBar');
         const progressFill = progressBar.querySelector('.progress-fill');
         const progressText = progressBar.querySelector('.progress-text');
@@ -123,6 +138,8 @@
 
             // Очищаем предыдущие результаты
             violationsList.innerHTML = '';
+            textList.innerHTML = '';
+            measurementsList.innerHTML = '';
             window.normChecker.clearHighlights();
 
             // Обрабатываем файл
@@ -142,7 +159,7 @@
             ctx.putImageData(imageData, 0, 0);
 
             // Анализируем изображение
-            updateProgress(60, 'Поиск нарушений...');
+            updateProgress(60, 'Распознавание текста и поиск нарушений...');
             const results = await window.imageAnalysis.analyzeImage(imageData);
 
             // Показываем секции
@@ -151,11 +168,46 @@
 
             updateProgress(80, 'Отображение результатов...');
 
-            // Отображаем результаты
-            if (results.violations.length === 0) {
-              violationsList.innerHTML =
-                '<div class="no-violations">Нарушений не обнаружено</div>';
+            // Отображаем распознанный текст
+            if (results.roomTypes && results.roomTypes.length > 0) {
+              results.roomTypes.forEach((room) => {
+                const div = document.createElement('div');
+                div.className = 'text-item';
+                div.innerHTML = `
+                  <span class="text-value">${room.type}</span>
+                  <span class="text-confidence">(${Math.round(
+                    room.confidence
+                  )}%)</span>
+                `;
+                textList.appendChild(div);
+              });
             } else {
+              textList.innerHTML =
+                '<div class="no-results">Текст не распознан</div>';
+            }
+
+            // Отображаем размеры
+            if (results.measurements && results.measurements.length > 0) {
+              results.measurements.forEach((measurement) => {
+                const div = document.createElement('div');
+                div.className = 'measurement-item';
+                div.innerHTML = `
+                  <span class="measurement-value">${measurement.value}${
+                  measurement.unit
+                }</span>
+                  <span class="measurement-confidence">(${Math.round(
+                    measurement.confidence
+                  )}%)</span>
+                `;
+                measurementsList.appendChild(div);
+              });
+            } else {
+              measurementsList.innerHTML =
+                '<div class="no-results">Размеры не найдены</div>';
+            }
+
+            // Отображаем нарушения
+            if (results.violations && results.violations.length > 0) {
               results.violations.forEach((violation) => {
                 const div = document.createElement('div');
                 div.className = 'violation-item';
@@ -167,6 +219,9 @@
                 `;
                 violationsList.appendChild(div);
               });
+            } else {
+              violationsList.innerHTML =
+                '<div class="no-violations">Нарушений не обнаружено</div>';
             }
 
             updateProgress(100, 'Готово');

@@ -20,7 +20,7 @@ const imageAnalysis = {
 
       // 2. Распознаем размеры
       const measurements = await this.recognizeMeasurements(imageData);
-      results.measurements = measurements;
+      results.measurements = measurements.measurements;
 
       // 3. Проверяем нормы для каждой комнаты
       rooms.forEach((room) => {
@@ -274,38 +274,95 @@ const imageAnalysis = {
       await worker.loadLanguage('rus');
       await worker.initialize('rus');
 
-      // Создаем canvas для передачи изображения в Tesseract
+      // Создаем canvas для предобработки изображения
       const canvas = document.createElement('canvas');
       canvas.width = imageData.width;
       canvas.height = imageData.height;
       const ctx = canvas.getContext('2d');
-      ctx.putImageData(imageData, 0, 0);
 
-      // Распознаем текст
-      const {
-        data: { text },
-      } = await worker.recognize(canvas);
+      // Применяем предобработку для улучшения распознавания
+      const processedImageData = this.preprocessForOCR(imageData);
+      ctx.putImageData(processedImageData, 0, 0);
+
+      // Распознаем текст с получением координат
+      const { data } = await worker.recognize(canvas, {
+        tessedit_char_whitelist: '0123456789.,абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ ',
+      });
+
       await worker.terminate();
 
-      // Ищем размеры в тексте
+      // Обрабатываем результаты распознавания
       const measurements = [];
-      const regex = /(\d+(?:\.\d+)?)\s*(мм|см|м)/g;
-      let match;
+      const roomTypes = [];
 
-      while ((match = regex.exec(text)) !== null) {
-        measurements.push({
-          value: parseFloat(match[1]),
-          unit: match[2],
-          x: 0, // В реальном приложении нужно определять координаты
-          y: 0,
-        });
-      }
+      // Обрабатываем каждое слово
+      data.words.forEach(word => {
+        // Проверяем на размеры (число + единица измерения)
+        const measurementMatch = word.text.match(/(\d+(?:[.,]\d+)?)\s*(мм|см|м)/i);
+        if (measurementMatch) {
+          measurements.push({
+            value: parseFloat(measurementMatch[1].replace(',', '.')),
+            unit: measurementMatch[2].toLowerCase(),
+            x: word.bbox.x0,
+            y: word.bbox.y0,
+            width: word.bbox.x1 - word.bbox.x0,
+            height: word.bbox.y1 - word.bbox.y0,
+            confidence: word.confidence
+          });
+        }
 
-      return measurements;
+        // Проверяем на типы помещений
+        const roomMatch = word.text.match(/(?:кухня|комната|санузел|ванная|туалет|коридор|прихожая)/i);
+        if (roomMatch) {
+          roomTypes.push({
+            type: roomMatch[0].toLowerCase(),
+            x: word.bbox.x0,
+            y: word.bbox.y0,
+            width: word.bbox.x1 - word.bbox.x0,
+            height: word.bbox.y1 - word.bbox.y0,
+            confidence: word.confidence
+          });
+        }
+      });
+
+      return {
+        measurements,
+        roomTypes
+      };
     } catch (error) {
-      console.error('Error recognizing measurements:', error);
-      return [];
+      console.error('Error recognizing text:', error);
+      return {
+        measurements: [],
+        roomTypes: []
+      };
     }
+  },
+
+  // Предобработка изображения для улучшения распознавания текста
+  preprocessForOCR(imageData) {
+    // Создаем копию изображения
+    const data = new Uint8ClampedArray(imageData.data);
+    const width = imageData.width;
+    const height = imageData.height;
+
+    // Преобразуем в оттенки серого
+    for (let i = 0; i < data.length; i += 4) {
+      const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      data[i] = avg;     // R
+      data[i + 1] = avg; // G
+      data[i + 2] = avg; // B
+    }
+
+    // Применяем пороговое значение для улучшения контраста
+    const threshold = 128;
+    for (let i = 0; i < data.length; i += 4) {
+      const value = data[i] > threshold ? 255 : 0;
+      data[i] = value;     // R
+      data[i + 1] = value; // G
+      data[i + 2] = value; // B
+    }
+
+    return new ImageData(data, width, height);
   },
 };
 
