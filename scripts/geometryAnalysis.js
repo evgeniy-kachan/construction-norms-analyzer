@@ -7,8 +7,26 @@ const geometryAnalysis = {
   async initialize() {
     try {
       console.log('Initializing TensorFlow model...');
+
+      // Пробуем использовать WebGL
+      try {
+        await tf.setBackend('webgl');
+        console.log('Using WebGL backend');
+      } catch (webglError) {
+        console.warn(
+          'WebGL initialization failed, falling back to CPU:',
+          webglError
+        );
+        // Переключаемся на CPU бэкенд
+        await tf.setBackend('cpu');
+        console.log('Using CPU backend');
+      }
+
       // Загружаем предварительно обученную модель COCO-SSD
-      this.model = await cocoSsd.load();
+      this.model = await cocoSsd.load({
+        base: 'lite_mobilenet_v2', // Используем облегченную модель
+      });
+
       this.isInitialized = true;
       console.log('TensorFlow model initialized');
     } catch (error) {
