@@ -67,22 +67,29 @@ const normChecker = {
       throw new Error('Нормы еще не загружены');
     }
 
-    const roomNorms = this.norms.rooms[roomType.toLowerCase()];
+    // Нормализуем тип помещения
+    roomType = roomType.toLowerCase();
+    console.log('Checking measurement for room type:', roomType);
+
+    const roomNorms = this.norms.rooms[roomType];
     if (!roomNorms) {
+      console.log('No norms found for room type:', roomType);
       return {
         isValid: true, // Если нет норм для типа помещения, считаем допустимым
-        violation: null,
+        violation: null
       };
     }
 
     const dimensionNorms = roomNorms[dimension];
     if (!dimensionNorms) {
+      console.log('No norms found for dimension:', dimension, 'in room type:', roomType);
       return {
         isValid: true, // Если нет норм для измерения, считаем допустимым
-        violation: null,
+        violation: null
       };
     }
 
+    console.log('Checking value:', value, 'against norm:', dimensionNorms.min);
     const isValid = value >= dimensionNorms.min;
     if (!isValid) {
       const violation = {
@@ -90,7 +97,7 @@ const normChecker = {
         description: dimensionNorms.description,
         norm: `${dimensionNorms.min} мм`,
         actual: `${value} мм`,
-        bounds: bounds,
+        bounds: bounds
       };
 
       // Добавляем подсветку нарушения

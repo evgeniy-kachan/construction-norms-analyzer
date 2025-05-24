@@ -303,21 +303,60 @@ const imageAnalysis = {
       const measurements = [];
       const roomTypes = [];
 
+      // Функция для нормализации текста
+      const normalizeText = (text) => {
+        const replacements = {
+          KyxHa: 'кухня',
+          Kyxня: 'кухня',
+          Kopuoop: 'коридор',
+          Room: 'комната',
+          room: 'комната',
+        };
+
+        // Приводим к нижнему регистру и заменяем известные ошибки
+        let normalized = text.toLowerCase();
+        for (const [wrong, correct] of Object.entries(replacements)) {
+          if (normalized.includes(wrong.toLowerCase())) {
+            normalized = correct;
+            break;
+          }
+        }
+        return normalized;
+      };
+
       // Обрабатываем каждое слово
       if (data.words && data.words.length > 0) {
         console.log('Processing', data.words.length, 'words');
         data.words.forEach((word, index) => {
-          console.log(`Processing word ${index + 1}:`, word.text);
+          const normalizedText = normalizeText(word.text);
+          console.log(
+            `Processing word ${index + 1}:`,
+            word.text,
+            '(normalized:',
+            normalizedText,
+            ')'
+          );
 
           // Проверяем на размеры (число + единица измерения)
-          const measurementMatch = word.text.match(
+          const measurementMatch = normalizedText.match(
             /(\d+(?:[.,]\d+)?)\s*(мм|см|м)/i
           );
           if (measurementMatch) {
             console.log('Found measurement:', measurementMatch[0]);
+            // Преобразуем все размеры в миллиметры
+            let value = parseFloat(measurementMatch[1].replace(',', '.'));
+            const unit = measurementMatch[2].toLowerCase();
+            if (unit === 'м') {
+              value *= 1000;
+            } else if (unit === 'см') {
+              value *= 10;
+            }
+
             measurements.push({
-              value: parseFloat(measurementMatch[1].replace(',', '.')),
-              unit: measurementMatch[2].toLowerCase(),
+              value: value,
+              unit: 'мм', // Храним все размеры в миллиметрах
+              originalValue: measurementMatch[1],
+              originalUnit: unit,
               x: word.bbox.x0,
               y: word.bbox.y0,
               width: word.bbox.x1 - word.bbox.x0,
@@ -327,13 +366,19 @@ const imageAnalysis = {
           }
 
           // Проверяем на типы помещений
-          const roomMatch = word.text.match(
-            /(?:кухня|комната|санузел|ванная|туалет|коридор|прихожая)/i
-          );
-          if (roomMatch) {
-            console.log('Found room type:', roomMatch[0]);
+          const roomTypes = [
+            'кухня',
+            'комната',
+            'санузел',
+            'ванная',
+            'туалет',
+            'коридор',
+            'прихожая',
+          ];
+          if (roomTypes.includes(normalizedText)) {
+            console.log('Found room type:', normalizedText);
             roomTypes.push({
-              type: roomMatch[0].toLowerCase(),
+              type: normalizedText,
               x: word.bbox.x0,
               y: word.bbox.y0,
               width: word.bbox.x1 - word.bbox.x0,
