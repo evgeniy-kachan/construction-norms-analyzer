@@ -8,6 +8,7 @@ const normChecker = {
   // Загрузка норм
   async loadNorms() {
     try {
+      console.log('Начинаем загрузку норм...');
       const response = await fetch(
         '/construction-norms-analyzer/building_norms_sp54_combined.json'
       );
@@ -15,7 +16,23 @@ const normChecker = {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       this.norms = await response.json();
-      console.log('Нормы успешно загружены');
+      console.log('Нормы загружены:', this.norms);
+
+      // Проверяем структуру загруженных норм
+      if (!this.norms || !this.norms.rooms) {
+        throw new Error('Некорректная структура норм');
+      }
+
+      // Проверяем наличие основных типов помещений
+      const requiredRooms = ['комната', 'кухня', 'санузел'];
+      const missingRooms = requiredRooms.filter(
+        (room) => !this.norms.rooms[room]
+      );
+      if (missingRooms.length > 0) {
+        console.warn('Отсутствуют нормы для помещений:', missingRooms);
+      }
+
+      console.log('Доступные типы помещений:', Object.keys(this.norms.rooms));
     } catch (error) {
       console.error('Ошибка при загрузке норм:', error);
       // Загружаем резервные нормы
@@ -57,7 +74,7 @@ const normChecker = {
           },
         },
       };
-      console.log('Загружены резервные нормы');
+      console.log('Загружены резервные нормы:', this.norms);
     }
   },
 
@@ -66,7 +83,7 @@ const normChecker = {
     if (!this.norms) {
       console.error('Нормы не загружены');
       return {
-        isValid: true, // Если нормы не загружены, пропускаем проверку
+        isValid: true,
         violation: null,
       };
     }
@@ -75,37 +92,40 @@ const normChecker = {
     roomType = (roomType || 'комната').toLowerCase();
     dimension = dimension.toLowerCase();
 
-    console.log('Checking measurement:', {
+    console.log('Проверка размеров:', {
       value,
       roomType,
       dimension,
       bounds,
+      availableNorms: this.norms,
     });
 
     const roomNorms = this.norms.rooms[roomType];
     if (!roomNorms) {
-      console.log('No norms found for room type:', roomType);
+      console.log('Нет норм для типа помещения:', roomType);
       return {
-        isValid: true, // Если нет норм для типа помещения, считаем допустимым
+        isValid: true,
         violation: null,
       };
     }
+
+    console.log('Найдены нормы для помещения:', roomType, roomNorms);
 
     const dimensionNorms = roomNorms[dimension];
     if (!dimensionNorms) {
-      console.log(
-        'No norms found for dimension:',
-        dimension,
-        'in room type:',
-        roomType
-      );
+      console.log('Нет норм для размера:', dimension, 'в помещении:', roomType);
       return {
-        isValid: true, // Если нет норм для измерения, считаем допустимым
+        isValid: true,
         violation: null,
       };
     }
 
-    console.log('Checking value:', value, 'against norm:', dimensionNorms.min);
+    console.log(
+      'Проверяем значение:',
+      value,
+      'против нормы:',
+      dimensionNorms.min
+    );
     const isValid = value >= dimensionNorms.min;
     if (!isValid) {
       const violation = {
@@ -115,6 +135,8 @@ const normChecker = {
         actual: `${value} мм`,
         bounds: bounds,
       };
+
+      console.log('Найдено нарушение:', violation);
 
       // Добавляем подсветку нарушения
       if (bounds) {

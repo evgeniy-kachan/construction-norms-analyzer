@@ -365,14 +365,14 @@ const imageAnalysis = {
 
           // Проверяем на размеры (число + единица измерения)
           const measurementMatch = normalizedText.match(
-            /(\d+(?:[.,]\d+)?)\s*(мм|см|м)/i
+            /(\d+(?:[.,]\d+)?)\s*(мм|см|м|m)/i
           );
           if (measurementMatch) {
             console.log('Found measurement:', measurementMatch[0]);
             // Преобразуем все размеры в миллиметры
             let value = parseFloat(measurementMatch[1].replace(',', '.'));
             const unit = measurementMatch[2].toLowerCase();
-            if (unit === 'м') {
+            if (unit === 'м' || unit === 'm') {
               value *= 1000;
             } else if (unit === 'см') {
               value *= 10;
@@ -392,7 +392,7 @@ const imageAnalysis = {
           }
 
           // Проверяем на типы помещений
-          const roomTypes = [
+          const validRoomTypes = [
             'кухня',
             'комната',
             'санузел',
@@ -401,7 +401,7 @@ const imageAnalysis = {
             'коридор',
             'прихожая',
           ];
-          if (roomTypes.includes(normalizedText)) {
+          if (validRoomTypes.includes(normalizedText)) {
             console.log('Found room type:', normalizedText);
             roomTypes.push({
               type: normalizedText,
@@ -420,6 +420,8 @@ const imageAnalysis = {
       console.log('Recognition results:', {
         measurements: measurements.length,
         roomTypes: roomTypes.length,
+        measurements_details: measurements,
+        roomTypes_details: roomTypes,
       });
 
       return {
