@@ -11,31 +11,35 @@ const imageAnalysis = {
     };
 
     try {
-      // 0. Убеждаемся, что нормы загружены
-      await window.normChecker.loadNorms();
-      console.log('Нормы загружены, начинаем анализ');
+      // 1. Анализируем геометрию с помощью TensorFlow
+      console.log('Starting TensorFlow analysis...');
+      const geometryResults = await window.geometryAnalysis.analyzeGeometry(imageData);
+      results.walls = geometryResults.walls;
+      results.rooms = geometryResults.rooms;
 
-      // 1. Определяем стены и комнаты
-      const walls = await this.detectWalls(imageData);
-      results.walls = walls;
+      // 2. Распознаем текст и размеры с помощью Tesseract
+      console.log('Starting Tesseract analysis...');
+      const textResults = await this.recognizeMeasurements(imageData);
+      results.measurements = textResults.measurements;
 
-      const rooms = this.detectRooms(walls);
-      results.rooms = rooms;
+      // 3. Сопоставляем распознанный текст с геометрией
+      console.log('Matching text with geometry...');
+      this.matchTextWithGeometry(results);
 
-      // 2. Распознаем размеры и типы помещений
-      const { measurements, roomTypes } = await this.recognizeMeasurements(
-        imageData
-      );
-      results.measurements = measurements;
+      // 4. Проверяем нормы для каждой комнаты
+      console.log('Checking building norms...');
+      results.rooms.forEach((room) => {
+        if (!room.type) {
+          console.log('Room without type, skipping norm check:', room);
+          return;
+        }
 
-      // 3. Проверяем нормы для каждой комнаты
-      rooms.forEach((room) => {
+        console.log('Checking room:', room);
+
         // Проверяем размеры комнаты
-        console.log('Проверяем комнату:', room);
-
         const widthCheck = window.normChecker.checkMeasurement(
           room.width,
-          room.type || 'комната', // Используем тип из распознавания или по умолчанию
+          room.type,
           'width',
           {
             x: room.bounds.x,
@@ -47,7 +51,7 @@ const imageAnalysis = {
 
         const lengthCheck = window.normChecker.checkMeasurement(
           room.length,
-          room.type || 'комната',
+          room.type,
           'length',
           {
             x: room.bounds.x,
@@ -59,7 +63,7 @@ const imageAnalysis = {
 
         const areaCheck = window.normChecker.checkArea(
           room.area,
-          room.type || 'комната',
+          room.type,
           {
             points: room.points,
           }
@@ -67,29 +71,122 @@ const imageAnalysis = {
 
         // Собираем нарушения
         if (!widthCheck.isValid) {
-          console.log('Найдено нарушение ширины:', widthCheck.violation);
+          console.log('Width violation found:', widthCheck.violation);
           results.violations.push(widthCheck.violation);
         }
         if (!lengthCheck.isValid) {
-          console.log('Найдено нарушение длины:', lengthCheck.violation);
+          console.log('Length violation found:', lengthCheck.violation);
           results.violations.push(lengthCheck.violation);
         }
         if (!areaCheck.isValid) {
-          console.log('Найдено нарушение площади:', areaCheck.violation);
+          console.log('Area violation found:', areaCheck.violation);
           results.violations.push(areaCheck.violation);
         }
       });
 
-      console.log(
-        'Анализ завершен, найдено нарушений:',
-        results.violations.length
-      );
+      console.log('Analysis completed:', results);
     } catch (error) {
-      console.error('Error analyzing image:', error);
-      throw error; // Пробрасываем ошибку дальше для обработки в UI
+      console.error('Error in image analysis:', error);
+      throw error;
     }
 
     return results;
+  },
+
+  // Сопоставление текста с геометрией
+  matchTextWithGeometry(results) {
+    console.log('Starting text-geometry matching...');
+    
+    // Для каждой найденной комнаты
+    results.rooms.forEach(room => {
+      // Ищем ближайший текст с типом помещения
+      const nearestRoomType = this.findNearestText(
+        room.bounds,
+        results.measurements,
+        'roomType'
+      );
+      if (nearestRoomType) {
+        room.type = nearestRoomType.type;
+        room.confidence = nearestRoomType.confidence;
+      }
+
+      // Ищем ближайшие размеры
+      const nearestMeasurements = this.findNearbyMeasurements(
+        room.bounds,
+        results.measurements
+      );
+      
+      // Определяем размеры на основе ориентации размеров
+      nearestMeasurements.forEach(measurement => {
+        const isHorizontal = this.isHorizontalMeasurement(measurement);
+        if (isHorizontal) {
+          room.width = measurement.value;
+        } else {
+          room.length = measurement.value;
+        }
+      });
+
+      console.log('Matched room:', room);
+    });
+  },
+
+  // Поиск ближайшего текста
+  findNearestText(bounds, measurements, type) {
+    const center = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2
+    };
+
+    let nearest = null;
+    let minDistance = Infinity;
+
+    measurements.forEach(measurement => {
+      if (measurement.type !== type) return;
+
+      const measurementCenter = {
+        x: measurement.x + measurement.width / 2,
+        y: measurement.y + measurement.height / 2
+      };
+
+      const distance = Math.sqrt(
+        Math.pow(center.x - measurementCenter.x, 2) +
+        Math.pow(center.y - measurementCenter.y, 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearest = measurement;
+      }
+    });
+
+    return nearest;
+  },
+
+  // Поиск ближайших размеров
+  findNearbyMeasurements(bounds, measurements) {
+    const maxDistance = Math.max(bounds.width, bounds.height) / 2;
+    return measurements.filter(measurement => {
+      const distance = this.getDistanceToBounds(measurement, bounds);
+      return distance <= maxDistance;
+    });
+  },
+
+  // Определение ориентации размера
+  isHorizontalMeasurement(measurement) {
+    return measurement.width > measurement.height;
+  },
+
+  // Расчет расстояния от точки до границ
+  getDistanceToBounds(point, bounds) {
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    const pointCenterX = point.x + point.width / 2;
+    const pointCenterY = point.y + point.height / 2;
+
+    return Math.sqrt(
+      Math.pow(centerX - pointCenterX, 2) +
+      Math.pow(centerY - pointCenterY, 2)
+    );
   },
 
   // Определение стен на изображении

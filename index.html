@@ -6,7 +6,9 @@
     <title>Анализатор строительных норм</title>
     <link rel="stylesheet" href="styles/main.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   </head>
   <body>
     <div class="container">
@@ -71,6 +73,8 @@
     <script src="scripts/imageProcessing.js"></script>
     <script src="scripts/normChecker.js"></script>
     <script src="scripts/violationHighlighter.js"></script>
+    <script src="scripts/geometryAnalysis.js"></script>
+    <script src="scripts/app.js"></script>
 
     <script>
       document.addEventListener('DOMContentLoaded', () => {
