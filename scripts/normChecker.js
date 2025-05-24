@@ -1,180 +1,236 @@
-// Загрузка норм из JSON файла
-let BUILDING_NORMS = null;
-let highlighter = null;
+// Модуль проверки строительных норм
+const normChecker = {
+  norms: null,
+  highlighter: null,
+  highlights: [],
+  showHighlights: true,
 
-async function loadNorms() {
-  try {
-    const response = await fetch('/building_norms_sp54_combined.json');
-    BUILDING_NORMS = await response.json();
-    console.log('Нормы успешно загружены');
-  } catch (error) {
-    console.error('Ошибка при загрузке норм:', error);
-  }
-}
+  // Загрузка норм
+  async loadNorms() {
+    try {
+      const response = await fetch('building_norms_sp54_combined.json');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      this.norms = await response.json();
+      console.log('Нормы успешно загружены');
+    } catch (error) {
+      console.error('Ошибка при загрузке норм:', error);
+      // Загружаем резервные нормы
+      this.norms = {
+        rooms: {
+          комната: {
+            width: {
+              min: 2400,
+              description: 'Минимальная ширина комнаты',
+            },
+            length: {
+              min: 3000,
+              description: 'Минимальная длина комнаты от окна',
+            },
+            area: {
+              min: 8,
+              description: 'Минимальная площадь комнаты',
+            },
+          },
+          кухня: {
+            width: {
+              min: 1700,
+              description: 'Минимальная ширина кухни',
+            },
+            area: {
+              min: 5,
+              description: 'Минимальная площадь кухни',
+            },
+          },
+          санузел: {
+            width: {
+              min: 1200,
+              description: 'Минимальная ширина санузла',
+            },
+            area: {
+              min: 1.5,
+              description: 'Минимальная площадь санузла',
+            },
+          },
+        },
+      };
+      console.log('Загружены резервные нормы');
+    }
+  },
 
-// Инициализация подсветки нарушений
-function initHighlighter(canvas) {
-  highlighter = new ViolationHighlighter(canvas);
-}
+  // Проверка размера
+  checkMeasurement(value, roomType, dimension, bounds) {
+    if (!this.norms) {
+      throw new Error('Нормы еще не загружены');
+    }
 
-function checkMeasurement(value, category, parameter, region) {
-  if (!BUILDING_NORMS) {
-    throw new Error('Нормы еще не загружены');
-  }
+    const roomNorms = this.norms.rooms[roomType.toLowerCase()];
+    if (!roomNorms) {
+      return {
+        isValid: true, // Если нет норм для типа помещения, считаем допустимым
+        violation: null,
+      };
+    }
 
-  const categoryNorms = BUILDING_NORMS[category];
-  if (!categoryNorms) {
-    throw new Error(`Неизвестная категория: ${category}`);
-  }
+    const dimensionNorms = roomNorms[dimension];
+    if (!dimensionNorms) {
+      return {
+        isValid: true, // Если нет норм для измерения, считаем допустимым
+        violation: null,
+      };
+    }
 
-  const parameterNorms = categoryNorms[parameter];
-  if (!parameterNorms) {
-    throw new Error(`Неизвестный параметр: ${parameter}`);
-  }
-
-  // Проверяем минимальное значение в миллиметрах
-  if (parameterNorms.min_mm && value < parameterNorms.min_mm) {
-    const violation = {
-      isValid: false,
-      violation: {
-        title: `Нарушение: ${parameterNorms.message}`,
-        description: `Значение меньше допустимого минимума`,
-        norm: `${parameterNorms.min_mm} мм`,
+    const isValid = value >= dimensionNorms.min;
+    if (!isValid) {
+      const violation = {
+        title: `Нарушение размера ${dimension} в помещении "${roomType}"`,
+        description: dimensionNorms.description,
+        norm: `${dimensionNorms.min} мм`,
         actual: `${value} мм`,
-      },
-    };
+        bounds: bounds,
+      };
 
-    // Добавляем подсветку, если указан регион и есть highlighter
-    if (highlighter && region) {
-      highlighter.addViolation({
-        region: region,
-        type: 'размер',
-        message: parameterNorms.message,
-      });
+      // Добавляем подсветку нарушения
+      if (bounds) {
+        this.addHighlight(bounds);
+      }
+
+      return { isValid, violation };
     }
 
-    return violation;
-  }
+    return { isValid: true, violation: null };
+  },
 
-  // Проверяем минимальное значение в метрах
-  if (parameterNorms.min_m && value < parameterNorms.min_m * 1000) {
-    const violation = {
-      isValid: false,
-      violation: {
-        title: `Нарушение: ${parameterNorms.message}`,
-        description: `Значение меньше допустимого минимума`,
-        norm: `${parameterNorms.min_m} м`,
-        actual: `${value / 1000} м`,
-      },
-    };
-
-    // Добавляем подсветку, если указан регион и есть highlighter
-    if (highlighter && region) {
-      highlighter.addViolation({
-        region: region,
-        type: 'размер',
-        message: parameterNorms.message,
-      });
+  // Проверка площади
+  checkArea(value, roomType, bounds) {
+    if (!this.norms) {
+      throw new Error('Нормы еще не загружены');
     }
 
-    return violation;
-  }
-
-  // Проверяем максимальное значение в метрах
-  if (parameterNorms.max_m && value > parameterNorms.max_m * 1000) {
-    const violation = {
-      isValid: false,
-      violation: {
-        title: `Нарушение: ${parameterNorms.message}`,
-        description: `Значение больше допустимого максимума`,
-        norm: `${parameterNorms.max_m} м`,
-        actual: `${value / 1000} м`,
-      },
-    };
-
-    // Добавляем подсветку, если указан регион и есть highlighter
-    if (highlighter && region) {
-      highlighter.addViolation({
-        region: region,
-        type: 'размер',
-        message: parameterNorms.message,
-      });
+    const roomNorms = this.norms.rooms[roomType.toLowerCase()];
+    if (!roomNorms || !roomNorms.area) {
+      return {
+        isValid: true,
+        violation: null,
+      };
     }
 
-    return violation;
-  }
+    const isValid = value >= roomNorms.area.min;
+    if (!isValid) {
+      const violation = {
+        title: `Нарушение площади в помещении "${roomType}"`,
+        description: roomNorms.area.description,
+        norm: `${roomNorms.area.min} м²`,
+        actual: `${value} м²`,
+        bounds: bounds,
+      };
 
-  return {
-    isValid: true,
-  };
-}
+      // Добавляем подсветку нарушения
+      if (bounds && bounds.points) {
+        this.addPolygonHighlight(bounds.points);
+      }
 
-function checkArea(area, category, region) {
-  if (!BUILDING_NORMS) {
-    throw new Error('Нормы еще не загружены');
-  }
-
-  const categoryNorms = BUILDING_NORMS[category];
-  if (!categoryNorms) {
-    throw new Error(`Неизвестная категория: ${category}`);
-  }
-
-  const areaNorms = categoryNorms.площадь;
-  if (!areaNorms) {
-    throw new Error(`Для категории ${category} не заданы нормы площади`);
-  }
-
-  if (area < areaNorms.min_m2) {
-    const violation = {
-      isValid: false,
-      violation: {
-        title: `Нарушение: ${areaNorms.message}`,
-        description: `Площадь меньше допустимого минимума`,
-        norm: `${areaNorms.min_m2} м²`,
-        actual: `${area} м²`,
-      },
-    };
-
-    // Добавляем подсветку, если указан регион и есть highlighter
-    if (highlighter && region) {
-      highlighter.addViolation({
-        region: region,
-        type: 'площадь',
-        message: areaNorms.message,
-      });
+      return { isValid, violation };
     }
 
-    return violation;
-  }
+    return { isValid: true, violation: null };
+  },
 
-  return {
-    isValid: true,
-  };
-}
+  // Инициализация подсветки нарушений
+  initHighlighter(canvas) {
+    this.highlighter = {
+      canvas: canvas,
+      ctx: canvas.getContext('2d'),
+    };
+    this.loadNorms(); // Загружаем нормы при инициализации
+  },
 
-// Очистка всех выделений
-function clearHighlights() {
-  if (highlighter) {
-    highlighter.clearHighlights();
-  }
-}
+  // Добавление подсветки нарушения
+  addHighlight(bounds) {
+    this.highlights.push({
+      type: 'rect',
+      bounds: bounds,
+    });
+    this.drawHighlights();
+  },
 
-// Переключение видимости выделений
-function toggleHighlights() {
-  if (highlighter) {
-    highlighter.toggleVisibility();
-  }
-}
+  // Добавление подсветки многоугольника
+  addPolygonHighlight(points) {
+    this.highlights.push({
+      type: 'polygon',
+      points: points,
+    });
+    this.drawHighlights();
+  },
 
-// Экспортируем функции
-window.normChecker = {
-  loadNorms,
-  initHighlighter,
-  checkMeasurement,
-  checkArea,
-  clearHighlights,
-  toggleHighlights,
+  // Отрисовка всех подсветок
+  drawHighlights() {
+    if (!this.highlighter || !this.showHighlights) return;
+
+    const ctx = this.highlighter.ctx;
+    ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+
+    this.highlights.forEach((highlight) => {
+      if (highlight.type === 'rect') {
+        ctx.strokeRect(
+          highlight.bounds.x,
+          highlight.bounds.y,
+          highlight.bounds.width,
+          highlight.bounds.height
+        );
+        ctx.fillRect(
+          highlight.bounds.x,
+          highlight.bounds.y,
+          highlight.bounds.width,
+          highlight.bounds.height
+        );
+      } else if (highlight.type === 'polygon') {
+        ctx.beginPath();
+        ctx.moveTo(highlight.points[0].x, highlight.points[0].y);
+        highlight.points.slice(1).forEach((point) => {
+          ctx.lineTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+      }
+    });
+  },
+
+  // Переключение видимости подсветки
+  toggleHighlights() {
+    this.showHighlights = !this.showHighlights;
+    if (this.showHighlights) {
+      this.drawHighlights();
+    } else {
+      // Очищаем canvas от подсветки
+      const imageData = this.highlighter.ctx.getImageData(
+        0,
+        0,
+        this.highlighter.canvas.width,
+        this.highlighter.canvas.height
+      );
+      this.highlighter.ctx.putImageData(imageData, 0, 0);
+    }
+  },
+
+  // Очистка подсветки
+  clearHighlights() {
+    this.highlights = [];
+    if (this.highlighter) {
+      const imageData = this.highlighter.ctx.getImageData(
+        0,
+        0,
+        this.highlighter.canvas.width,
+        this.highlighter.canvas.height
+      );
+      this.highlighter.ctx.putImageData(imageData, 0, 0);
+    }
+  },
 };
 
-// Загружаем нормы при инициализации
-loadNorms();
+// Экспортируем модуль
+window.normChecker = normChecker;

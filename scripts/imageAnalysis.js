@@ -275,12 +275,6 @@ const imageAnalysis = {
       const worker = await Tesseract.createWorker();
       console.log('Worker created');
 
-      await worker.loadLanguage('rus');
-      console.log('Russian language loaded');
-
-      await worker.initialize('rus');
-      console.log('Worker initialized');
-
       // Создаем canvas для предобработки изображения
       const canvas = document.createElement('canvas');
       canvas.width = imageData.width;
@@ -299,10 +293,7 @@ const imageAnalysis = {
 
       // Распознаем текст с получением координат
       console.log('Starting Tesseract recognition...');
-      const { data } = await worker.recognize(imageUrl, {
-        tessedit_char_whitelist:
-          '0123456789.,абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ ',
-      });
+      const { data } = await worker.recognize(imageUrl);
       console.log('Recognition completed. Raw result:', data);
 
       await worker.terminate();
@@ -366,7 +357,7 @@ const imageAnalysis = {
       };
     } catch (error) {
       console.error('Error in text recognition:', error);
-      throw error; // Пробрасываем ошибку дальше для обработки
+      throw error;
     }
   },
 
