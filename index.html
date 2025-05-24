@@ -183,7 +183,7 @@
               });
             } else {
               textList.innerHTML =
-                '<div class="no-results">Текст не распознан</div>';
+                '<div class="no-results">Текст не распознан. Убедитесь, что изображение четкое и содержит текст.</div>';
             }
 
             // Отображаем размеры
@@ -203,7 +203,7 @@
               });
             } else {
               measurementsList.innerHTML =
-                '<div class="no-results">Размеры не найдены</div>';
+                '<div class="no-results">Размеры не найдены. Проверьте, что на чертеже есть размеры в формате "число + единица измерения" (например, "2000 мм").</div>';
             }
 
             // Отображаем нарушения
@@ -230,8 +230,21 @@
             }, 1000);
           } catch (error) {
             console.error('Error processing file:', error);
-            alert('Произошла ошибка при обработке файла: ' + error.message);
+            alert(
+              'Произошла ошибка при обработке файла. Проверьте консоль разработчика для деталей.'
+            );
             progressBar.hidden = true;
+
+            // Показываем секции с сообщением об ошибке
+            previewSection.hidden = false;
+            resultsSection.hidden = false;
+
+            textList.innerHTML =
+              '<div class="error-message">Ошибка при распознавании текста</div>';
+            measurementsList.innerHTML =
+              '<div class="error-message">Ошибка при распознавании размеров</div>';
+            violationsList.innerHTML =
+              '<div class="error-message">Невозможно проверить нарушения</div>';
           }
         }
       });
