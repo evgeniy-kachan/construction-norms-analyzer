@@ -8,7 +8,9 @@ const normChecker = {
   // Загрузка норм
   async loadNorms() {
     try {
-      const response = await fetch('building_norms_sp54_combined.json');
+      const response = await fetch(
+        '/construction-norms-analyzer/building_norms_sp54_combined.json'
+      );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
